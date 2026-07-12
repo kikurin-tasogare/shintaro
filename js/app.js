@@ -2,7 +2,7 @@ import { store } from './storage.js';
 import {
   ORGANIC_FOODS, MEAL_TEMPLATES, WORKOUT_TEMPLATES, DAYS, MEAL_TYPES,
   BULK_TIPS, ORGANIC_SHOPS, calcBulkTargets, getFoodById,
-  estimateMealNutrition, todayStr, formatDate,
+  estimateMealNutrition, todayStr, formatDate, getTodayDayKey,
 } from './data.js';
 
 let state = {
@@ -98,8 +98,19 @@ function renderHome() {
     ? (data.weightLogs[0].weight - data.weightLogs[data.weightLogs.length - 1].weight).toFixed(1)
     : null;
 
+  const startWeight = data.weightLogs.length
+    ? data.weightLogs[data.weightLogs.length - 1].weight
+    : data.profile.weight;
+  const currentWeight = data.weightLogs[0]?.weight || data.profile.weight;
+  const targetWeight = data.profile.targetWeight;
+  const weightProgress = targetWeight > startWeight
+    ? Math.round(((currentWeight - startWeight) / (targetWeight - startWeight)) * 100)
+    : 0;
+
   main().innerHTML = `
     <div class="tip-box">💡 ${tip}</div>
+
+    ${renderTodayPlan()}
 
     <div class="card">
       <div class="card-title">📊 今日の進捗 <span class="tag tag-bulk">増量中</span></div>
@@ -134,7 +145,15 @@ function renderHome() {
           ${gained !== null ? `（変化: ${gained > 0 ? '+' : ''}${gained}kg）` : ''}
         </p>` : `
         <div class="empty-state"><div class="emoji">⚖️</div><p>体重を記録するとグラフが表示されます</p></div>`}
-      ${progressBar('🎯 目標まで', data.weightLogs[0]?.weight || data.profile.weight, data.profile.targetWeight, 'weight')}
+      <div class="progress-group">
+        <div class="progress-label">
+          <span>🎯 目標まで</span>
+          <span>${currentWeight} / ${targetWeight}kg（${Math.max(0, Math.min(100, weightProgress))}%）</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill weight" style="width:${Math.max(0, Math.min(100, weightProgress))}%"></div>
+        </div>
+      </div>
       <button class="btn btn-secondary btn-block" style="margin-top:0.75rem" onclick="navigate('log','weight')">
         体重を記録する
       </button>
@@ -161,6 +180,106 @@ function renderTodayMeals(date) {
         </div>
       </div>
     </li>`).join('')}</ul>`;
+}
+
+function renderTodayPlan() {
+  const data = getData();
+  const dayKey = getTodayDayKey();
+  const workoutId = data.workoutMenu.days[dayKey];
+  const workoutTpl = workoutId ? WORKOUT_TEMPLATES.find(t => t.id === workoutId) : null;
+  const dayMeals = data.mealMenu.days[dayKey] || {};
+  const plannedMeals = MEAL_TYPES.map(mt => {
+    const mealId = dayMeals[mt];
+    const tpl = mealId ? MEAL_TEMPLATES.find(t => t.id === mealId) : null;
+    return tpl ? { mealType: mt, tpl } : null;
+  }).filter(Boolean);
+
+  if (!workoutTpl && !plannedMeals.length) {
+    return `
+      <div class="card">
+        <div class="card-title">📅 今日（${dayKey}）の予定</div>
+        <div class="empty-state"><div class="emoji">📋</div><p>週間メニューが未設定です</p></div>
+        <button class="btn btn-secondary btn-block" style="margin-top:0.75rem" onclick="navigate('menu')">
+          メニューを設定する
+        </button>
+      </div>`;
+  }
+
+  const workoutSection = workoutTpl ? `
+    <div class="menu-meal" style="margin-bottom:0.75rem">
+      <div class="menu-meal-name">🏋️ ${esc(workoutTpl.name)}</div>
+      <div class="menu-meal-detail">${workoutTpl.exercises.length}種目 · ${workoutTpl.description}</div>
+      <button class="btn btn-primary btn-sm" style="margin-top:0.5rem" data-quick-workout="${workoutTpl.id}">
+        このメニューで記録
+      </button>
+    </div>` : `
+    <div class="menu-meal" style="margin-bottom:0.75rem">
+      <div class="menu-meal-name">🏋️ 休養日</div>
+      <div class="menu-meal-detail">今日の筋トレメニューは未設定です</div>
+    </div>`;
+
+  const mealSection = plannedMeals.length ? plannedMeals.map(({ mealType, tpl }) => {
+    const n = estimateMealNutrition(tpl.ingredients);
+    return `
+      <div class="menu-meal" style="margin-bottom:0.5rem">
+        <div class="menu-meal-name">${mealType} — ${esc(tpl.name)}</div>
+        <div class="menu-meal-detail">約 ${n.calories}kcal · P${n.protein}g</div>
+        <button class="btn btn-outline btn-sm" style="margin-top:0.35rem" data-quick-meal="${tpl.id}">
+          記録する
+        </button>
+      </div>`;
+  }).join('') : `<div class="empty-state" style="padding:1rem 0"><p>食事メニュー未設定</p></div>`;
+
+  return `
+    <div class="card">
+      <div class="card-title">📅 今日（${dayKey}）の予定</div>
+      ${workoutSection}
+      <div class="section-divider">🍽️ 食事プラン</div>
+      ${mealSection}
+    </div>`;
+}
+
+function bindHomeEvents() {
+  document.querySelectorAll('[data-quick-workout]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      quickLogWorkout(btn.dataset.quickWorkout);
+    });
+  });
+  document.querySelectorAll('[data-quick-meal]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      quickLogMeal(btn.dataset.quickMeal);
+    });
+  });
+}
+
+function quickLogWorkout(templateId) {
+  const tpl = WORKOUT_TEMPLATES.find(t => t.id === templateId);
+  if (!tpl) return;
+  store.addWorkoutLog({
+    date: todayStr(),
+    title: tpl.name,
+    duration: '',
+    exercises: tpl.exercises.map(ex => ({ name: ex.name, sets: ex.sets, reps: ex.reps })),
+    note: '週間メニューから記録',
+  });
+  toast('今日の筋トレを記録しました 💪');
+  renderAll();
+}
+
+function quickLogMeal(templateId) {
+  const tpl = MEAL_TEMPLATES.find(t => t.id === templateId);
+  if (!tpl) return;
+  const nutrition = estimateMealNutrition(tpl.ingredients);
+  store.addMealLog({
+    date: todayStr(),
+    mealType: tpl.mealType,
+    name: tpl.name,
+    ...nutrition,
+    organic: tpl.organicOnly,
+    note: '週間メニューから記録',
+  });
+  toast('食事を記録しました 🍽️');
+  renderAll();
 }
 
 // ─── Log Page ───
@@ -917,7 +1036,7 @@ function navigate(page, tab) {
 
 function renderPage() {
   switch (state.page) {
-    case 'home': renderHome(); break;
+    case 'home': renderHome(); bindHomeEvents(); break;
     case 'log': renderLog(); bindLogEvents(); break;
     case 'menu': renderMenu(); bindMenuEvents(); break;
     case 'settings': renderSettings(); break;
@@ -945,3 +1064,10 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 });
 
 renderAll();
+
+// PWA: Service Worker登録
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
