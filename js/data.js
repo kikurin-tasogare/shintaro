@@ -250,6 +250,60 @@ export function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** 今日の曜日キー（月〜日） */
+export function getTodayDayKey() {
+  const keys = ['日', '月', '火', '水', '木', '金', '土'];
+  return keys[new Date().getDay()];
+}
+
+/** 直近n日分の日付リスト（古い順） */
+export function getRecentDates(n = 7) {
+  const dates = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+/** 週間サマリー統計 */
+export function calcWeeklyStats(data, targets, dates = getRecentDates(7)) {
+  let totalCal = 0;
+  let totalPro = 0;
+  let workoutDays = 0;
+  const dailyCals = [];
+
+  for (const date of dates) {
+    const meals = data.mealLogs.filter(l => l.date === date);
+    const workouts = data.workoutLogs.filter(l => l.date === date);
+    const dayCal = meals.reduce((s, m) => s + (m.calories || 0), 0);
+    const dayPro = meals.reduce((s, m) => s + (m.protein || 0), 0);
+    totalCal += dayCal;
+    totalPro += dayPro;
+    if (workouts.length) workoutDays++;
+    dailyCals.push({ date, calories: dayCal, protein: dayPro });
+  }
+
+  const n = dates.length;
+  const weightsInRange = data.weightLogs
+    .filter(w => w.date >= dates[0] && w.date <= dates[dates.length - 1])
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const weightChange = weightsInRange.length >= 2
+    ? +(weightsInRange[weightsInRange.length - 1].weight - weightsInRange[0].weight).toFixed(1)
+    : null;
+
+  return {
+    avgCalories: Math.round(totalCal / n),
+    avgProtein: Math.round(totalPro / n),
+    workoutDays,
+    dailyCals,
+    weightChange,
+    calHitRate: targets.calories > 0 ? Math.min(100, Math.round((totalCal / n / targets.calories) * 100)) : 0,
+    proHitRate: targets.protein > 0 ? Math.min(100, Math.round((totalPro / n / targets.protein) * 100)) : 0,
+  };
+}
+
 export function formatDate(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   const days = ['日', '月', '火', '水', '木', '金', '土'];

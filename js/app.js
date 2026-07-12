@@ -2,7 +2,8 @@ import { store } from './storage.js';
 import {
   ORGANIC_FOODS, MEAL_TEMPLATES, WORKOUT_TEMPLATES, DAYS, MEAL_TYPES,
   BULK_TIPS, ORGANIC_SHOPS, calcBulkTargets, getFoodById,
-  estimateMealNutrition, todayStr, formatDate,
+  estimateMealNutrition, todayStr, formatDate, getTodayDayKey,
+  getRecentDates, calcWeeklyStats,
 } from './data.js';
 
 let state = {
@@ -98,8 +99,20 @@ function renderHome() {
     ? (data.weightLogs[0].weight - data.weightLogs[data.weightLogs.length - 1].weight).toFixed(1)
     : null;
 
+  const startWeight = data.weightLogs.length
+    ? data.weightLogs[data.weightLogs.length - 1].weight
+    : data.profile.weight;
+  const currentWeight = data.weightLogs[0]?.weight || data.profile.weight;
+  const targetWeight = data.profile.targetWeight;
+  const weightProgress = targetWeight > startWeight
+    ? Math.round(((currentWeight - startWeight) / (targetWeight - startWeight)) * 100)
+    : 0;
+
   main().innerHTML = `
     <div class="tip-box">💡 ${tip}</div>
+
+    ${renderWeeklyReport()}
+    ${renderTodayPlan()}
 
     <div class="card">
       <div class="card-title">📊 今日の進捗 <span class="tag tag-bulk">増量中</span></div>
@@ -134,7 +147,15 @@ function renderHome() {
           ${gained !== null ? `（変化: ${gained > 0 ? '+' : ''}${gained}kg）` : ''}
         </p>` : `
         <div class="empty-state"><div class="emoji">⚖️</div><p>体重を記録するとグラフが表示されます</p></div>`}
-      ${progressBar('🎯 目標まで', data.weightLogs[0]?.weight || data.profile.weight, data.profile.targetWeight, 'weight')}
+      <div class="progress-group">
+        <div class="progress-label">
+          <span>🎯 目標まで</span>
+          <span>${currentWeight} / ${targetWeight}kg（${Math.max(0, Math.min(100, weightProgress))}%）</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill weight" style="width:${Math.max(0, Math.min(100, weightProgress))}%"></div>
+        </div>
+      </div>
       <button class="btn btn-secondary btn-block" style="margin-top:0.75rem" onclick="navigate('log','weight')">
         体重を記録する
       </button>
@@ -161,6 +182,197 @@ function renderTodayMeals(date) {
         </div>
       </div>
     </li>`).join('')}</ul>`;
+}
+
+function renderWeeklyReport() {
+  const data = getData();
+  const targets = calcBulkTargets(data.profile);
+  const stats = calcWeeklyStats(data, targets);
+  const maxCal = Math.max(targets.calories, ...stats.dailyCals.map(d => d.calories), 1);
+
+  const chartBars = stats.dailyCals.map(d => {
+    const h = Math.round((d.calories / maxCal) * 100);
+    const label = d.date.slice(5).replace('-', '/');
+    const hit = d.calories >= targets.calories * 0.9;
+    return `<div class="chart-bar-wrap">
+      <div class="chart-bar ${hit ? 'chart-bar-hit' : ''}" style="height:${Math.max(h, 4)}%" title="${d.calories}kcal"></div>
+      <span class="chart-label">${label}</span>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="card">
+      <div class="card-title">📈 週間レポート <span class="tag tag-bulk">過去7日</span></div>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-box-label">平均カロリー</span>
+          <span class="stat-box-value">${stats.avgCalories}</span>
+          <span class="stat-box-sub">目標 ${stats.calHitRate}%</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-box-label">平均タンパク質</span>
+          <span class="stat-box-value">${stats.avgProtein}g</span>
+          <span class="stat-box-sub">目標 ${stats.proHitRate}%</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-box-label">トレーニング</span>
+          <span class="stat-box-value">${stats.workoutDays}回</span>
+          <span class="stat-box-sub">7日中</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-box-label">体重変化</span>
+          <span class="stat-box-value">${stats.weightChange !== null ? (stats.weightChange > 0 ? '+' : '') + stats.weightChange + 'kg' : '—'}</span>
+          <span class="stat-box-sub">7日間</span>
+        </div>
+      </div>
+      <p style="font-size:0.8rem;color:var(--brown-muted);margin:0.75rem 0 0.5rem">日別カロリー（緑=目標90%以上）</p>
+      <div class="weight-chart">${chartBars}</div>
+    </div>`;
+}
+
+function renderTodayPlan() {
+  const data = getData();
+  const dayKey = getTodayDayKey();
+  const workoutId = data.workoutMenu.days[dayKey];
+  const workoutTpl = workoutId ? WORKOUT_TEMPLATES.find(t => t.id === workoutId) : null;
+  const dayMeals = data.mealMenu.days[dayKey] || {};
+  const plannedMeals = MEAL_TYPES.map(mt => {
+    const mealId = dayMeals[mt];
+    const tpl = mealId ? MEAL_TEMPLATES.find(t => t.id === mealId) : null;
+    return tpl ? { mealType: mt, tpl } : null;
+  }).filter(Boolean);
+
+  if (!workoutTpl && !plannedMeals.length) {
+    return `
+      <div class="card">
+        <div class="card-title">📅 今日（${dayKey}）の予定</div>
+        <div class="empty-state"><div class="emoji">📋</div><p>週間メニューが未設定です</p></div>
+        <button class="btn btn-secondary btn-block" style="margin-top:0.75rem" onclick="navigate('menu')">
+          メニューを設定する
+        </button>
+      </div>`;
+  }
+
+  const workoutSection = workoutTpl ? `
+    <div class="menu-meal" style="margin-bottom:0.75rem">
+      <div class="menu-meal-name">🏋️ ${esc(workoutTpl.name)}</div>
+      <div class="menu-meal-detail">${workoutTpl.exercises.length}種目 · ${workoutTpl.description}</div>
+      <button class="btn btn-primary btn-sm" style="margin-top:0.5rem" data-quick-workout="${workoutTpl.id}">
+        このメニューで記録
+      </button>
+    </div>` : `
+    <div class="menu-meal" style="margin-bottom:0.75rem">
+      <div class="menu-meal-name">🏋️ 休養日</div>
+      <div class="menu-meal-detail">今日の筋トレメニューは未設定です</div>
+    </div>`;
+
+  const mealSection = plannedMeals.length ? plannedMeals.map(({ mealType, tpl }) => {
+    const n = estimateMealNutrition(tpl.ingredients);
+    return `
+      <div class="menu-meal" style="margin-bottom:0.5rem">
+        <div class="menu-meal-name">${mealType} — ${esc(tpl.name)}</div>
+        <div class="menu-meal-detail">約 ${n.calories}kcal · P${n.protein}g</div>
+        <button class="btn btn-outline btn-sm" style="margin-top:0.35rem" data-quick-meal="${tpl.id}">
+          記録する
+        </button>
+      </div>`;
+  }).join('') : `<div class="empty-state" style="padding:1rem 0"><p>食事メニュー未設定</p></div>`;
+
+  return `
+    <div class="card">
+      <div class="card-title">📅 今日（${dayKey}）の予定</div>
+      ${workoutSection}
+      <div class="section-divider">🍽️ 食事プラン</div>
+      ${mealSection}
+      ${plannedMeals.length ? `
+        <button class="btn btn-secondary btn-block" id="quickLogAllMeals" style="margin-top:0.75rem">
+          今日の食事をまとめて記録
+        </button>` : ''}
+    </div>`;
+}
+
+function bindHomeEvents() {
+  document.querySelectorAll('[data-quick-workout]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      quickLogWorkout(btn.dataset.quickWorkout);
+    });
+  });
+  document.querySelectorAll('[data-quick-meal]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      quickLogMeal(btn.dataset.quickMeal);
+    });
+  });
+  $('#quickLogAllMeals')?.addEventListener('click', quickLogAllMeals);
+}
+
+function quickLogWorkout(templateId) {
+  const tpl = WORKOUT_TEMPLATES.find(t => t.id === templateId);
+  if (!tpl) return;
+  store.addWorkoutLog({
+    date: todayStr(),
+    title: tpl.name,
+    duration: '',
+    exercises: tpl.exercises.map(ex => ({ name: ex.name, sets: ex.sets, reps: ex.reps })),
+    note: '週間メニューから記録',
+  });
+  toast('今日の筋トレを記録しました 💪');
+  renderAll();
+}
+
+function quickLogMeal(templateId) {
+  const tpl = MEAL_TEMPLATES.find(t => t.id === templateId);
+  if (!tpl) return;
+  const today = todayStr();
+  const existing = store.getLogsForDate(today).meals;
+  if (existing.some(m => m.name === tpl.name && m.mealType === tpl.mealType)) {
+    toast('この食事はすでに記録済みです');
+    return;
+  }
+  const nutrition = estimateMealNutrition(tpl.ingredients);
+  store.addMealLog({
+    date: today,
+    mealType: tpl.mealType,
+    name: tpl.name,
+    ...nutrition,
+    organic: tpl.organicOnly,
+    note: '週間メニューから記録',
+  });
+  toast('食事を記録しました 🍽️');
+  renderAll();
+}
+
+function quickLogAllMeals() {
+  const data = getData();
+  const dayKey = getTodayDayKey();
+  const dayMeals = data.mealMenu.days[dayKey] || {};
+  const today = todayStr();
+  const existing = store.getLogsForDate(today).meals;
+  let count = 0;
+
+  for (const mt of MEAL_TYPES) {
+    const mealId = dayMeals[mt];
+    if (!mealId) continue;
+    const tpl = MEAL_TEMPLATES.find(t => t.id === mealId);
+    if (!tpl) continue;
+    if (existing.some(m => m.name === tpl.name && m.mealType === tpl.mealType)) continue;
+    const nutrition = estimateMealNutrition(tpl.ingredients);
+    store.addMealLog({
+      date: today,
+      mealType: tpl.mealType,
+      name: tpl.name,
+      ...nutrition,
+      organic: tpl.organicOnly,
+      note: '週間メニューから記録',
+    });
+    count++;
+  }
+
+  if (!count) {
+    toast('記録できる食事がありません（すべて記録済み）');
+  } else {
+    toast(`${count}件の食事を記録しました 🍽️`);
+    renderAll();
+  }
 }
 
 // ─── Log Page ───
@@ -240,6 +452,7 @@ function renderWorkoutLog() {
             ${w.exercises?.length ? `<div class="log-item-meta">${w.exercises.map(e => `${e.name} ${e.sets}×${e.reps}`).join(' / ')}</div>` : ''}
           </div>
           <div class="log-item-actions">
+            <button class="btn btn-outline btn-sm" data-edit-workout="${w.id}">編集</button>
             <button class="btn btn-danger btn-sm" data-delete-workout="${w.id}">削除</button>
           </div>
         </li>`).join('')}</ul>`
@@ -307,6 +520,7 @@ function renderMealLog() {
             <div class="log-item-meta">${formatDate(m.date)} · ${m.calories || 0}kcal · P${m.protein || 0}g</div>
           </div>
           <div class="log-item-actions">
+            <button class="btn btn-outline btn-sm" data-edit-meal="${m.id}">編集</button>
             <button class="btn btn-danger btn-sm" data-delete-meal="${m.id}">削除</button>
           </div>
         </li>`).join('')}</ul>`
@@ -352,6 +566,7 @@ function renderWeightLog() {
             <div class="log-item-meta">${formatDate(w.date)}${w.note ? ' · ' + esc(w.note) : ''}</div>
           </div>
           <div class="log-item-actions">
+            <button class="btn btn-outline btn-sm" data-edit-weight="${w.id}">編集</button>
             <button class="btn btn-danger btn-sm" data-delete-weight="${w.id}">削除</button>
           </div>
         </li>`).join('')}</ul>`
@@ -493,6 +708,178 @@ function bindLogEvents() {
         toast('削除しました');
         renderAll();
       }
+    });
+  });
+
+  document.querySelectorAll('[data-edit-workout]').forEach(btn => {
+    btn.addEventListener('click', () => openEditWorkout(btn.dataset.editWorkout));
+  });
+  document.querySelectorAll('[data-edit-meal]').forEach(btn => {
+    btn.addEventListener('click', () => openEditMeal(btn.dataset.editMeal));
+  });
+  document.querySelectorAll('[data-edit-weight]').forEach(btn => {
+    btn.addEventListener('click', () => openEditWeight(btn.dataset.editWeight));
+  });
+}
+
+// ─── Edit Modal ───
+function openModal(title, contentHtml, onBind) {
+  const root = $('#modalRoot');
+  root.innerHTML = `
+    <div class="modal-overlay" id="editModalOverlay">
+      <div class="modal">
+        <div class="modal-title">${title}</div>
+        ${contentHtml}
+        <button type="button" class="btn btn-outline btn-block" id="editModalCancel" style="margin-top:0.75rem">キャンセル</button>
+      </div>
+    </div>`;
+  $('#editModalCancel').addEventListener('click', closeModal);
+  $('#editModalOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'editModalOverlay') closeModal();
+  });
+  onBind?.();
+}
+
+function closeModal() {
+  $('#modalRoot').innerHTML = '';
+}
+
+function openEditWorkout(id) {
+  const log = store.getWorkoutLog(id);
+  if (!log) return;
+  const exercisesHtml = (log.exercises?.length ? log.exercises : [{ name: '', sets: '', reps: '' }]).map(ex => `
+    <div class="set-row exercise-entry">
+      <div><label>種目名</label><input name="exName" value="${esc(ex.name)}"></div>
+      <div><label>セット</label><input name="exSets" type="number" value="${ex.sets}" min="1"></div>
+      <div><label>レップ</label><input name="exReps" value="${esc(ex.reps)}"></div>
+      <button type="button" class="btn btn-danger btn-sm remove-exercise">✕</button>
+    </div>`).join('');
+
+  openModal('🏋️ 筋トレ記録を編集', `
+    <form id="editWorkoutForm">
+      <input type="hidden" name="id" value="${log.id}">
+      <div class="form-group"><label>日付</label><input type="date" name="date" value="${log.date}" required></div>
+      <div class="form-group"><label>タイトル</label><input type="text" name="title" value="${esc(log.title)}" required></div>
+      <div class="form-group"><label>時間（分）</label><input type="number" name="duration" value="${log.duration || ''}" min="1"></div>
+      <div class="form-group"><label>種目</label><div id="editExerciseList">${exercisesHtml}</div>
+        <button type="button" class="btn btn-outline btn-sm" id="editAddExercise" style="margin-top:0.5rem">＋ 種目を追加</button>
+      </div>
+      <div class="form-group"><label>メモ</label><textarea name="note">${esc(log.note || '')}</textarea></div>
+      <button type="submit" class="btn btn-primary btn-block">更新を保存</button>
+    </form>`, () => {
+    const form = $('#editWorkoutForm');
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const exercises = [];
+      form.querySelectorAll('.exercise-entry').forEach(row => {
+        const name = row.querySelector('[name="exName"]').value.trim();
+        if (name) exercises.push({
+          name,
+          sets: row.querySelector('[name="exSets"]').value || '—',
+          reps: row.querySelector('[name="exReps"]').value || '—',
+        });
+      });
+      store.updateWorkoutLog(fd.get('id'), {
+        date: fd.get('date'),
+        title: fd.get('title'),
+        duration: fd.get('duration'),
+        exercises,
+        note: fd.get('note'),
+      });
+      closeModal();
+      toast('記録を更新しました 💪');
+      renderAll();
+    });
+    $('#editAddExercise').addEventListener('click', () => {
+      const row = document.createElement('div');
+      row.className = 'set-row exercise-entry';
+      row.innerHTML = `
+        <div><label>種目名</label><input name="exName"></div>
+        <div><label>セット</label><input name="exSets" type="number" min="1"></div>
+        <div><label>レップ</label><input name="exReps"></div>
+        <button type="button" class="btn btn-danger btn-sm remove-exercise">✕</button>`;
+      $('#editExerciseList').appendChild(row);
+      row.querySelector('.remove-exercise').addEventListener('click', () => row.remove());
+    });
+    form.querySelectorAll('.remove-exercise').forEach(btn => {
+      btn.addEventListener('click', () => btn.closest('.exercise-entry').remove());
+    });
+  });
+}
+
+function openEditMeal(id) {
+  const log = store.getMealLog(id);
+  if (!log) return;
+  openModal('🍽️ 食事記録を編集', `
+    <form id="editMealForm">
+      <input type="hidden" name="id" value="${log.id}">
+      <div class="form-row">
+        <div class="form-group"><label>日付</label><input type="date" name="date" value="${log.date}" required></div>
+        <div class="form-group"><label>食事タイプ</label>
+          <select name="mealType">${MEAL_TYPES.map(t => `<option ${log.mealType === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="form-group"><label>メニュー名</label><input type="text" name="name" value="${esc(log.name)}" required></div>
+      <div class="form-row-3">
+        <div class="form-group"><label>カロリー</label><input type="number" name="calories" value="${log.calories || 0}" min="0"></div>
+        <div class="form-group"><label>タンパク質(g)</label><input type="number" name="protein" value="${log.protein || 0}" min="0"></div>
+        <div class="form-group"><label>炭水化物(g)</label><input type="number" name="carbs" value="${log.carbs || 0}" min="0"></div>
+      </div>
+      <div class="form-group"><label>脂質(g)</label><input type="number" name="fat" value="${log.fat || 0}" min="0" style="max-width:33%"></div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+          <input type="checkbox" name="organic" style="width:auto" ${log.organic ? 'checked' : ''}> 🌿 オーガニック食材使用
+        </label>
+      </div>
+      <div class="form-group"><label>メモ</label><textarea name="note">${esc(log.note || '')}</textarea></div>
+      <button type="submit" class="btn btn-primary btn-block">更新を保存</button>
+    </form>`, () => {
+    $('#editMealForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      store.updateMealLog(fd.get('id'), {
+        date: fd.get('date'),
+        mealType: fd.get('mealType'),
+        name: fd.get('name'),
+        calories: Number(fd.get('calories')) || 0,
+        protein: Number(fd.get('protein')) || 0,
+        carbs: Number(fd.get('carbs')) || 0,
+        fat: Number(fd.get('fat')) || 0,
+        organic: fd.get('organic') === 'on',
+        note: fd.get('note'),
+      });
+      closeModal();
+      toast('記録を更新しました 🍽️');
+      renderAll();
+    });
+  });
+}
+
+function openEditWeight(id) {
+  const log = store.getWeightLog(id);
+  if (!log) return;
+  openModal('⚖️ 体重記録を編集', `
+    <form id="editWeightForm">
+      <input type="hidden" name="id" value="${log.id}">
+      <div class="form-row">
+        <div class="form-group"><label>日付</label><input type="date" name="date" value="${log.date}" required></div>
+        <div class="form-group"><label>体重 (kg)</label><input type="number" name="weight" step="0.1" value="${log.weight}" required></div>
+      </div>
+      <div class="form-group"><label>メモ</label><input type="text" name="note" value="${esc(log.note || '')}"></div>
+      <button type="submit" class="btn btn-primary btn-block">更新を保存</button>
+    </form>`, () => {
+    $('#editWeightForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      store.updateWeightLog(fd.get('id'), {
+        date: fd.get('date'),
+        weight: Number(fd.get('weight')),
+        note: fd.get('note'),
+      });
+      closeModal();
+      toast('記録を更新しました ⚖️');
+      renderAll();
     });
   });
 }
@@ -917,7 +1304,7 @@ function navigate(page, tab) {
 
 function renderPage() {
   switch (state.page) {
-    case 'home': renderHome(); break;
+    case 'home': renderHome(); bindHomeEvents(); break;
     case 'log': renderLog(); bindLogEvents(); break;
     case 'menu': renderMenu(); bindMenuEvents(); break;
     case 'settings': renderSettings(); break;
@@ -945,3 +1332,10 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 });
 
 renderAll();
+
+// PWA: Service Worker登録
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
