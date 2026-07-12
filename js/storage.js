@@ -82,6 +82,19 @@ export const store = {
     save(data);
   },
 
+  updateWorkoutLog(id, log) {
+    const data = load();
+    const idx = data.workoutLogs.findIndex(l => l.id === id);
+    if (idx === -1) return null;
+    data.workoutLogs[idx] = { ...data.workoutLogs[idx], ...log, id };
+    save(data);
+    return data.workoutLogs[idx];
+  },
+
+  getWorkoutLog(id) {
+    return load().workoutLogs.find(l => l.id === id);
+  },
+
   addMealLog(log) {
     const data = load();
     const entry = { id: generateId(), date: log.date, ...log };
@@ -94,6 +107,19 @@ export const store = {
     const data = load();
     data.mealLogs = data.mealLogs.filter(l => l.id !== id);
     save(data);
+  },
+
+  updateMealLog(id, log) {
+    const data = load();
+    const idx = data.mealLogs.findIndex(l => l.id === id);
+    if (idx === -1) return null;
+    data.mealLogs[idx] = { ...data.mealLogs[idx], ...log, id };
+    save(data);
+    return data.mealLogs[idx];
+  },
+
+  getMealLog(id) {
+    return load().mealLogs.find(l => l.id === id);
   },
 
   addWeightLog(log) {
@@ -111,6 +137,22 @@ export const store = {
     const data = load();
     data.weightLogs = data.weightLogs.filter(l => l.id !== id);
     save(data);
+  },
+
+  updateWeightLog(id, log) {
+    const data = load();
+    const idx = data.weightLogs.findIndex(l => l.id === id);
+    if (idx === -1) return null;
+    const entry = { ...data.weightLogs[idx], ...log, id };
+    data.weightLogs = data.weightLogs.filter(l => l.id !== id && l.date !== log.date);
+    data.weightLogs.unshift(entry);
+    data.weightLogs.sort((a, b) => b.date.localeCompare(a.date));
+    save(data);
+    return entry;
+  },
+
+  getWeightLog(id) {
+    return load().weightLogs.find(l => l.id === id);
   },
 
   saveWorkoutMenu(menu) {

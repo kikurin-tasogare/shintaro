@@ -441,6 +441,41 @@ textarea { resize: vertical; min-height: 80px; }
   opacity: 1;
 }
 
+/* Weekly stats grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem;
+}
+.stat-box {
+  background: var(--gray-100);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  text-align: center;
+}
+.stat-box-label {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--brown-muted);
+  margin-bottom: 0.25rem;
+}
+.stat-box-value {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--green-dark);
+}
+.stat-box-sub {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--brown-muted);
+  margin-top: 0.15rem;
+}
+.chart-bar-hit {
+  background: var(--green-light) !important;
+}
+
 /* Modal overlay */
 .modal-overlay {
   position: fixed;

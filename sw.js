@@ -1,4 +1,4 @@
-const CACHE = 'shinyu-bulk-log-v2';
+const CACHE = 'shinyu-bulk-log-v3';
 const ASSETS = [
   './',
   './index.html',
