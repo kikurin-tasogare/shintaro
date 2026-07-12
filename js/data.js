@@ -250,6 +250,12 @@ export function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** 今日の曜日キー（月〜日） */
+export function getTodayDayKey() {
+  const keys = ['日', '月', '火', '水', '木', '金', '土'];
+  return keys[new Date().getDay()];
+}
+
 export function formatDate(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   const days = ['日', '月', '火', '水', '木', '金', '土'];

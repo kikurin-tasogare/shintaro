@@ -39,7 +39,10 @@ python3 -m http.server 8080
 
 ブラウザで **http://localhost:8080** を開いてください。
 
-スマホから使う場合は、同じWi-Fi内でPCのIPアドレス（例: `http://192.168.1.10:8080`）にアクセス。
+### スマホで使う
+- **GitHub Pages**（公開後）: リポジトリの Settings → Pages で有効化すると `https://<username>.github.io/shintaro/` でアクセス可能
+- **ホーム画面に追加**: PWA対応済み。Safari/Chromeの「ホーム画面に追加」でアプリのように使えます
+- **ローカルネットワーク**: 同じWi-Fi内でPCのIPアドレス（例: `http://192.168.1.10:8080`）にアクセス
 
 ## データ保存
 
@@ -51,6 +54,9 @@ python3 -m http.server 8080
 ```
 shintaro/
 ├── index.html      # メインHTML
+├── manifest.json   # PWAマニフェスト
+├── sw.js           # Service Worker（オフライン対応）
+├── icons/          # PWAアイコン
 ├── css/app.css     # スタイル
 ├── js/
 │   ├── app.js      # アプリ本体
