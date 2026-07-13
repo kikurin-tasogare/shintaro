@@ -1,9 +1,10 @@
-import { store } from './storage.js';
+import { store } from './storage.js?v=3';
 import {
   ORGANIC_FOODS, MEAL_TEMPLATES, WORKOUT_TEMPLATES, DAYS, MEAL_TYPES,
   BULK_TIPS, ORGANIC_SHOPS, calcBulkTargets, getFoodById,
-  estimateMealNutrition, todayStr, formatDate,
-} from './data.js';
+  estimateMealNutrition, buildDailyMealPlan, getWorkoutWeek, NUTRITION_SOURCE,
+  todayStr, formatDate,
+} from './data.js?v=3';
 
 let state = {
   page: 'home',
@@ -23,6 +24,33 @@ function toast(msg) {
 }
 
 function getData() { return store.getAll(); }
+
+function profileWithLatestWeight(data) {
+  return { ...data.profile, weight: data.weightLogs[0]?.weight || data.profile.weight };
+}
+
+function averageWeight(logs) {
+  if (!logs.length) return null;
+  return logs.reduce((sum, log) => sum + Number(log.weight), 0) / logs.length;
+}
+
+function getWeightTrend(data) {
+  const sorted = [...data.weightLogs].sort((a, b) => b.date.localeCompare(a.date));
+  const recent = averageWeight(sorted.slice(0, 7));
+  const previous = sorted.length >= 14 ? averageWeight(sorted.slice(7, 14)) : null;
+  return {
+    average: recent,
+    weeklyChange: recent !== null && previous !== null ? recent - previous : null,
+  };
+}
+
+function weightTrendAdvice(data, trend) {
+  if (trend.weeklyChange === null || trend.average === null) return '14日分たまると、増量ペースから食事量の調整目安を表示します。';
+  const rate = trend.weeklyChange / Math.max(trend.average, 1) * 100;
+  if (rate < 0.25) return `週${rate.toFixed(2)}%。2週間続けて低ければ、まず1日+100kcalを検討。`;
+  if (rate > 0.5) return `週${rate.toFixed(2)}%。脂肪増加を抑えたい場合は、1日-100kcalを検討。`;
+  return `週${rate.toFixed(2)}%。一般的な増量目安（週0.25〜0.5%）の範囲です。`;
+}
 
 function getTodayNutrition(date) {
   const { meals } = store.getLogsForDate(date);
@@ -51,7 +79,7 @@ function progressBar(label, current, target, cls) {
 // ─── Header ───
 function renderHeader() {
   const data = getData();
-  const targets = calcBulkTargets(data.profile);
+  const targets = calcBulkTargets(profileWithLatestWeight(data));
   const today = todayStr();
   const nutrition = getTodayNutrition(today);
   const latestWeight = data.weightLogs[0]?.weight || data.profile.weight;
@@ -74,12 +102,15 @@ function renderHeader() {
 // ─── Home ───
 function renderHome() {
   const data = getData();
-  const targets = calcBulkTargets(data.profile);
+  const liveProfile = profileWithLatestWeight(data);
+  const targets = calcBulkTargets(liveProfile);
   const today = todayStr();
   const nutrition = getTodayNutrition(today);
   const { workouts } = store.getLogsForDate(today);
   const weightLogs = data.weightLogs.slice(0, 14).reverse();
   const tip = BULK_TIPS[new Date().getDate() % BULK_TIPS.length];
+  const trend = getWeightTrend(data);
+  const dailyPlan = buildDailyMealPlan(today, targets);
 
   const weightMin = weightLogs.length ? Math.min(...weightLogs.map(w => w.weight)) - 1 : data.profile.weight - 2;
   const weightMax = weightLogs.length ? Math.max(...weightLogs.map(w => w.weight)) + 1 : data.profile.targetWeight + 1;
@@ -134,10 +165,15 @@ function renderHome() {
           ${gained !== null ? `（変化: ${gained > 0 ? '+' : ''}${gained}kg）` : ''}
         </p>` : `
         <div class="empty-state"><div class="emoji">⚖️</div><p>体重を記録するとグラフが表示されます</p></div>`}
-      ${progressBar('🎯 目標まで', data.weightLogs[0]?.weight || data.profile.weight, data.profile.targetWeight, 'weight')}
+      ${goalWeightProgress(data)}
       <button class="btn btn-secondary btn-block" style="margin-top:0.75rem" onclick="navigate('log','weight')">
         体重を記録する
       </button>
+      <p class="evidence-note" style="margin-top:0.75rem">
+        7日平均: ${trend.average === null ? '記録待ち' : `${trend.average.toFixed(1)}kg`}
+        ${trend.weeklyChange === null ? '' : ` · 前週比 ${trend.weeklyChange >= 0 ? '+' : ''}${trend.weeklyChange.toFixed(2)}kg`}
+        <br>${weightTrendAdvice(data, trend)}
+      </p>
     </div>
 
     <div class="card">
@@ -146,7 +182,41 @@ function renderHome() {
       <button class="btn btn-primary btn-block" style="margin-top:0.75rem" onclick="navigate('log','meal')">
         食事を記録する
       </button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🥢 今日のGF増量プラン <span class="tag tag-gf">GF優先</span></div>
+      <p class="card-lead">毎日組み合わせを変え、分量から栄養を計算しています。</p>
+      ${dailyPlan.map(item => `
+        <div class="plan-meal">
+          <div class="plan-meal-head"><span class="tag tag-meal">${item.mealType}</span><strong>${esc(item.name)}</strong></div>
+          <div class="log-item-meta">${item.nutrition.calories}kcal · P${item.nutrition.protein}g · C${item.nutrition.carbs}g · F${item.nutrition.fat}g</div>
+          <details><summary>材料・作り方</summary>
+            <ul class="ingredient-list">${item.ingredients.map(entry => {
+              const food = getFoodById(entry.id);
+              return `<li>${esc(food?.name || entry.id)} ${Math.round(entry.grams * item.servings)}g${food?.checkLabel ? ' <span class="label-check">表示確認</span>' : ''}</li>`;
+            }).join('')}</ul>
+            <p class="recipe-steps">${item.steps.map((step, i) => `${i + 1}. ${esc(step)}`).join('<br>')}</p>
+          </details>
+        </div>`).join('')}
+      <div class="evidence-note">
+        栄養値出典: <a href="${NUTRITION_SOURCE.url}" target="_blank" rel="noopener">${NUTRITION_SOURCE.name}</a>。商品表示がある場合は商品値を優先してください。<br>
+        参考: <a href="https://pubmed.ncbi.nlm.nih.gov/31247944/" target="_blank" rel="noopener">増量期の栄養レビュー</a> ·
+        <a href="https://www.maff.go.jp/j/syouan/keikaku/soukatu/okome_summary/04/functio_nality_03.html" target="_blank" rel="noopener">農林水産省のGF解説</a>
+      </div>
     </div>`;
+}
+
+function goalWeightProgress(data) {
+  const start = Number(data.profile.startWeight || data.profile.weight);
+  const current = Number(data.weightLogs[0]?.weight || data.profile.weight);
+  const target = Number(data.profile.targetWeight);
+  const span = target - start;
+  const pct = span > 0 ? Math.max(0, Math.min(100, Math.round(((current - start) / span) * 100))) : 0;
+  return `<div class="progress-group">
+    <div class="progress-label"><span>🎯 目標まで</span><span>${current}kg / ${target}kg（${pct}%）</span></div>
+    <div class="progress-bar"><div class="progress-fill weight" style="width:${pct}%"></div></div>
+  </div>`;
 }
 
 function renderTodayMeals(date) {
@@ -155,9 +225,9 @@ function renderTodayMeals(date) {
   return `<ul class="log-list">${meals.map(m => `
     <li class="log-item">
       <div class="log-item-main">
-        <div class="log-item-title">${esc(m.name)} <span class="tag tag-meal">${m.mealType || ''}</span></div>
+        <div class="log-item-title">${esc(m.name)} <span class="tag tag-meal">${esc(m.mealType || '')}</span></div>
         <div class="log-item-meta">${m.calories || 0}kcal · P${m.protein || 0}g · C${m.carbs || 0}g · F${m.fat || 0}g
-          ${m.organic ? '<span class="tag tag-organic">🌿 オーガニック</span>' : ''}
+          ${m.organic ? '<span class="tag tag-organic">🌿 素材中心</span>' : ''}
         </div>
       </div>
     </li>`).join('')}</ul>`;
@@ -216,8 +286,10 @@ function renderWorkoutLog() {
           <div id="exerciseList">
             <div class="set-row exercise-entry">
               <div><label>種目名</label><input name="exName" placeholder="ベンチプレス"></div>
+              <div><label>重量kg</label><input name="exWeight" type="number" step="0.5" min="0" placeholder="40"></div>
               <div><label>セット</label><input name="exSets" type="number" placeholder="4" min="1"></div>
               <div><label>レップ</label><input name="exReps" placeholder="8-10"></div>
+              <div><label>RIR</label><input name="exRir" type="number" min="0" max="10" placeholder="2"></div>
               <button type="button" class="btn btn-danger btn-sm remove-exercise" style="visibility:hidden">✕</button>
             </div>
           </div>
@@ -229,6 +301,7 @@ function renderWorkoutLog() {
         </div>
         <button type="submit" class="btn btn-primary btn-block">記録を保存</button>
       </form>
+      ${renderTrainingAdvice(recent[0])}
     </div>
     <div class="card">
       <div class="card-title">📜 最近の記録</div>
@@ -237,7 +310,7 @@ function renderWorkoutLog() {
           <div class="log-item-main">
             <div class="log-item-title">${esc(w.title)}</div>
             <div class="log-item-meta">${formatDate(w.date)} · ${w.exercises?.length || 0}種目 · ${w.duration || '—'}分</div>
-            ${w.exercises?.length ? `<div class="log-item-meta">${w.exercises.map(e => `${e.name} ${e.sets}×${e.reps}`).join(' / ')}</div>` : ''}
+            ${w.exercises?.length ? `<div class="log-item-meta">${w.exercises.map(e => `${esc(e.name)} ${esc(e.weight || '—')}kg · ${esc(e.sets)}×${esc(e.reps)} · RIR${esc(e.rir || '—')}`).join('<br>')}</div>` : ''}
           </div>
           <div class="log-item-actions">
             <button class="btn btn-danger btn-sm" data-delete-workout="${w.id}">削除</button>
@@ -245,6 +318,19 @@ function renderWorkoutLog() {
         </li>`).join('')}</ul>`
       : `<div class="empty-state"><p>まだ記録がありません</p></div>`}
     </div>`;
+}
+
+function renderTrainingAdvice(lastWorkout) {
+  if (!lastWorkout?.exercises?.length) return `<div class="evidence-note" style="margin-top:1rem">最初はテンプレートを選び、フォームを崩さず「あと2回できる」程度で記録してください。</div>`;
+  const rows = lastWorkout.exercises.map(ex => {
+    const hasRir = ex.rir !== '' && ex.rir !== null && ex.rir !== undefined;
+    const rir = hasRir ? Number(ex.rir) : NaN;
+    let advice = '同じ重量で回数を1回ずつ伸ばす';
+    if (Number.isFinite(rir) && rir >= 3) advice = '余裕あり。次回は最小幅だけ重量を上げる候補';
+    if (Number.isFinite(rir) && rir === 0) advice = '限界。次回は重量維持か少し軽くする';
+    return `<li><strong>${esc(ex.name)}</strong>：${advice}</li>`;
+  }).join('');
+  return `<div class="training-advice"><strong>次回の目安</strong><ul>${rows}</ul><small>痛みがある場合は数値に関係なく中止し、痛くない種目へ変更してください。</small></div>`;
 }
 
 function renderMealLog() {
@@ -286,7 +372,7 @@ function renderMealLog() {
         </div>
         <div class="form-group">
           <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
-            <input type="checkbox" name="organic" style="width:auto"> 🌿 オーガニック食材使用
+            <input type="checkbox" name="organic" style="width:auto"> 🌿 素材中心・原材料確認済み
           </label>
         </div>
         <div class="form-group">
@@ -301,7 +387,7 @@ function renderMealLog() {
       ${recent.length ? `<ul class="log-list">${recent.map(m => `
         <li class="log-item">
           <div class="log-item-main">
-            <div class="log-item-title">${esc(m.name)} <span class="tag tag-meal">${m.mealType || ''}</span>
+            <div class="log-item-title">${esc(m.name)} <span class="tag tag-meal">${esc(m.mealType || '')}</span>
               ${m.organic ? '<span class="tag tag-organic">🌿</span>' : ''}
             </div>
             <div class="log-item-meta">${formatDate(m.date)} · ${m.calories || 0}kcal · P${m.protein || 0}g</div>
@@ -317,11 +403,11 @@ function renderMealLog() {
 function renderWeightLog() {
   const data = getData();
   const logs = data.weightLogs.slice(0, 30);
-  const targets = calcBulkTargets(data.profile);
+  const targets = calcBulkTargets(profileWithLatestWeight(data));
   return `
     <div class="card">
       <div class="card-title">⚖️ 体重を記録</div>
-      <div class="tip-box">増量期は週1回、同じ条件（朝・排泄後）で測定。月+0.5〜1kgが理想ペース。</div>
+      <div class="tip-box">測定は毎日でも大丈夫。朝・排泄後など条件をそろえ、日々の上下ではなく7日平均で判断します。</div>
       <form id="weightForm">
         <div class="form-row">
           <div class="form-group">
@@ -371,8 +457,10 @@ function bindLogEvents() {
         const name = row.querySelector('[name="exName"]').value.trim();
         if (name) exercises.push({
           name,
+          weight: row.querySelector('[name="exWeight"]').value || '',
           sets: row.querySelector('[name="exSets"]').value || '—',
           reps: row.querySelector('[name="exReps"]').value || '—',
+          rir: row.querySelector('[name="exRir"]').value || '',
         });
       });
       store.addWorkoutLog({
@@ -392,8 +480,10 @@ function bindLogEvents() {
       row.className = 'set-row exercise-entry';
       row.innerHTML = `
         <div><label>種目名</label><input name="exName" placeholder="種目名"></div>
+        <div><label>重量kg</label><input name="exWeight" type="number" step="0.5" min="0" placeholder="40"></div>
         <div><label>セット</label><input name="exSets" type="number" placeholder="3" min="1"></div>
         <div><label>レップ</label><input name="exReps" placeholder="10"></div>
+        <div><label>RIR</label><input name="exRir" type="number" min="0" max="10" placeholder="2"></div>
         <button type="button" class="btn btn-danger btn-sm remove-exercise">✕</button>`;
       list.appendChild(row);
       row.querySelector('.remove-exercise').addEventListener('click', () => row.remove());
@@ -410,8 +500,10 @@ function bindLogEvents() {
         row.className = 'set-row exercise-entry';
         row.innerHTML = `
           <div><label>種目名</label><input name="exName" value="${esc(ex.name)}"></div>
+          <div><label>重量kg</label><input name="exWeight" type="number" step="0.5" min="0" placeholder="記録"></div>
           <div><label>セット</label><input name="exSets" type="number" value="${ex.sets}" min="1"></div>
           <div><label>レップ</label><input name="exReps" value="${esc(ex.reps)}"></div>
+          <div><label>RIR</label><input name="exRir" type="number" min="0" max="10" value="2"></div>
           <button type="button" class="btn btn-danger btn-sm remove-exercise">✕</button>`;
         list.appendChild(row);
         row.querySelector('.remove-exercise').addEventListener('click', () => row.remove());
@@ -450,7 +542,7 @@ function bindLogEvents() {
       mf.querySelector('[name="protein"]').value = nutrition.protein;
       mf.querySelector('[name="carbs"]').value = nutrition.carbs;
       mf.querySelector('[name="fat"]').value = nutrition.fat;
-      mf.querySelector('[name="organic"]').checked = tpl.organicOnly;
+      mf.querySelector('[name="organic"]').checked = tpl.minimallyProcessed;
     });
   }
 
@@ -524,7 +616,7 @@ function renderWorkoutMenu() {
     <div class="card">
       <div class="card-title">🏋️ 週間筋トレメニュー</div>
       <p style="font-size:0.85rem;color:var(--brown-muted);margin-bottom:1rem">
-        増量期は週3〜5回、Compound系（スクワット・デッド・ベンチ）を中心に。
+        続けられる日数を優先。基本種目は4〜8週間続け、重量か回数を少しずつ伸ばします。
       </p>
       ${DAYS.map(day => {
         const assigned = menu.days[day];
@@ -550,19 +642,20 @@ function renderWorkoutMenu() {
           </div>`;
       }).join('')}
       <button class="btn btn-secondary btn-block" id="applyBulkSplit" style="margin-top:0.75rem">
-        📋 増量向け3分割を自動設定
+        📋 設定した日数で自動作成
       </button>
+      <div class="evidence-note" style="margin-top:0.75rem">参考: <a href="https://acsm.org/resistance-training-guidelines-update-2026/" target="_blank" rel="noopener">ACSM 2026 筋力トレーニング指針</a>。筋肥大は各筋群週約10セットを出発点に、継続と回復を優先します。</div>
     </div>`;
 }
 
 function renderMealMenuBuilder() {
   const data = getData();
   const menu = data.mealMenu;
-  const targets = calcBulkTargets(data.profile);
+  const targets = calcBulkTargets(profileWithLatestWeight(data));
 
   return `
     <div class="card">
-      <div class="card-title">🍽️ 週間食事メニュー <span class="tag tag-organic">🌿 オーガニック</span></div>
+        <div class="card-title">🍽️ 週間食事メニュー <span class="tag tag-gf">GF優先</span></div>
       <p style="font-size:0.85rem;color:var(--brown-muted);margin-bottom:1rem">
         1日目標: ${targets.calories}kcal / タンパク質${targets.protein}g
       </p>
@@ -608,10 +701,10 @@ function renderMealMenuBuilder() {
                       <div class="menu-meal-detail">${esc(tpl.description)}</div>
                       <div class="menu-meal-detail" style="margin-top:0.25rem">
                         ${(() => { const n = estimateMealNutrition(tpl.ingredients); return `約 ${n.calories}kcal · P${n.protein}g · C${n.carbs}g · F${n.fat}g`; })()}
-                        <span class="tag tag-organic">🌿 オーガニック</span>
+                        <span class="tag tag-gf">GF優先</span>
                       </div>
                       <div class="menu-meal-detail" style="margin-top:0.25rem">
-                        材料: ${tpl.ingredients.map(id => getFoodById(id)?.name || id).join('、')}
+                        材料: ${tpl.ingredients.map(entry => getFoodById(typeof entry === 'string' ? entry : entry.id)?.name || '').filter(Boolean).join('、')}
                       </div>` : ''}
                   </div>`;
               }).join('')}
@@ -624,10 +717,10 @@ function renderMealMenuBuilder() {
     </div>
 
     <div class="card">
-      <div class="card-title">📖 オーガニック食材テンプレート一覧</div>
+      <div class="card-title">📖 GF優先テンプレート一覧</div>
       ${MEAL_TEMPLATES.map(t => `
         <div class="menu-meal">
-          <div class="menu-meal-name">${t.name} <span class="tag tag-meal">${t.mealType}</span> <span class="tag tag-organic">🌿</span></div>
+          <div class="menu-meal-name">${esc(t.name)} <span class="tag tag-meal">${t.mealType}</span> <span class="tag tag-gf">GF</span></div>
           <div class="menu-meal-detail">${esc(t.description)}</div>
         </div>`).join('')}
     </div>`;
@@ -643,7 +736,7 @@ function renderShoppingList() {
       const mealId = menu.days[day][mt];
       if (mealId) {
         const tpl = MEAL_TEMPLATES.find(t => t.id === mealId);
-        if (tpl) tpl.ingredients.forEach(id => ingredientSet.add(id));
+          if (tpl) tpl.ingredients.forEach(entry => ingredientSet.add(typeof entry === 'string' ? entry : entry.id));
       }
     }
   }
@@ -659,7 +752,7 @@ function renderShoppingList() {
     <div class="card">
       <div class="card-title">🛒 週間買い物リスト</div>
       <p style="font-size:0.85rem;color:var(--brown-muted);margin-bottom:1rem">
-        食事メニューから自動生成。すべてオーガニック対応食材。
+        食事メニューから自動生成。包装食品はGF表示と原材料を確認してください。
       </p>
       ${Object.keys(byCategory).length ? Object.entries(byCategory).map(([cat, foods]) => `
         <div class="section-divider">${cat}</div>
@@ -669,7 +762,7 @@ function renderShoppingList() {
             const checked = data.shoppingChecked[key];
             return `<li class="shopping-item ${checked ? 'checked' : ''}">
               <input type="checkbox" data-shop-check="${key}" ${checked ? 'checked' : ''}>
-              <span>${f.name} <span class="tag tag-organic">🌿</span></span>
+              <span>${esc(f.name)} ${f.checkLabel ? '<span class="label-check">表示確認</span>' : ''}</span>
             </li>`;
           }).join('')}
         </ul>`).join('')
@@ -677,7 +770,7 @@ function renderShoppingList() {
     </div>
 
     <div class="card">
-      <div class="card-title">🏪 オーガニック食材の購入先</div>
+      <div class="card-title">🏪 素材中心の購入ヒント</div>
       ${ORGANIC_SHOPS.map(s => `
         <div class="menu-meal">
           <div class="menu-meal-name">${s.name}</div>
@@ -720,26 +813,24 @@ function bindMenuEvents() {
 
   $('#applyBulkSplit')?.addEventListener('click', () => {
     const data = getData();
-    data.workoutMenu.days = { 月: 'push', 火: null, 水: 'pull', 木: null, 金: 'legs', 土: 'full', 日: null };
+    const suggested = getWorkoutWeek(data.profile.daysPerWeek);
+    data.workoutMenu.days = { 月: null, 火: null, 水: null, 木: null, 金: null, 土: null, 日: null, ...suggested };
     store.saveWorkoutMenu(data.workoutMenu);
-    toast('増量向け3分割＋全身を設定しました 💪');
+    toast(`週${data.profile.daysPerWeek}日のメニューを設定しました 💪`);
     renderAll();
   });
 
   $('#applyBulkMeals')?.addEventListener('click', () => {
     const data = getData();
-    const plan = {
-      月: { 朝食: 'breakfast-oats', 昼食: 'lunch-rice-chicken', 夕食: 'dinner-beef-rice', 間食: 'snack-nuts' },
-      火: { 朝食: 'breakfast-eggs', 昼食: 'lunch-pasta', 夕食: 'dinner-pork', 間食: 'snack-eggs' },
-      水: { 朝食: 'breakfast-oats', 昼食: 'lunch-rice-chicken', 夕食: 'dinner-beef-rice', 間食: 'snack-nuts' },
-      木: { 朝食: 'breakfast-eggs', 昼食: 'lunch-pasta', 夕食: 'dinner-pork', 間食: 'snack-eggs' },
-      金: { 朝食: 'breakfast-oats', 昼食: 'lunch-rice-chicken', 夕食: 'dinner-beef-rice', 間食: 'snack-nuts' },
-      土: { 朝食: 'breakfast-eggs', 昼食: 'lunch-pasta', 夕食: 'dinner-pork', 間食: 'snack-eggs' },
-      日: { 朝食: 'breakfast-oats', 昼食: 'lunch-rice-chicken', 夕食: 'dinner-beef-rice', 間食: 'snack-nuts' },
-    };
+    const targets = calcBulkTargets(profileWithLatestWeight(data));
+    const plan = {};
+    DAYS.forEach((day, index) => {
+      const date = `2026-01-${String(index + 10).padStart(2, '0')}`;
+      plan[day] = Object.fromEntries(buildDailyMealPlan(date, targets).map(item => [item.mealType, item.id]));
+    });
     data.mealMenu.days = plan;
     store.saveMealMenu(data.mealMenu);
-    toast('増量向けオーガニック食事プランを設定しました 🌿');
+    toast('GF優先の増量食事プランを設定しました 🌾');
     renderAll();
   });
 
@@ -756,7 +847,7 @@ function bindMenuEvents() {
 function renderSettings() {
   const data = getData();
   const p = data.profile;
-  const targets = calcBulkTargets(p);
+  const targets = calcBulkTargets(profileWithLatestWeight(data));
 
   main().innerHTML = `
     <div class="card">
@@ -814,20 +905,46 @@ function renderSettings() {
             <input type="number" name="proteinRatio" value="${p.proteinRatio}" min="1.2" max="2.5" step="0.1">
           </div>
         </div>
-        <div class="form-group">
-          <label>オーガニック食材の優先度</label>
-          <select name="organicPriority">
-            <option value="high" ${p.organicPriority === 'high' ? 'selected' : ''}>できる限りオーガニック</option>
-            <option value="medium" ${p.organicPriority === 'medium' ? 'selected' : ''}>主要食材はオーガニック</option>
-            <option value="flexible" ${p.organicPriority === 'flexible' ? 'selected' : ''}>柔軟に（入手しやすい方を優先）</option>
-          </select>
+        <div class="section-divider">食事の方針</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>グルテンフリー</label>
+            <select name="glutenMode">
+              <option value="prefer" ${p.glutenMode === 'prefer' ? 'selected' : ''}>できるだけ優先</option>
+              <option value="strict" ${p.glutenMode === 'strict' ? 'selected' : ''}>厳格に除外</option>
+              <option value="medical" ${p.glutenMode === 'medical' ? 'selected' : ''}>医療上必要（混入も注意）</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>加工品・添加物</label>
+            <select name="additivePriority">
+              <option value="high" ${p.additivePriority === 'high' ? 'selected' : ''}>素材中心</option>
+              <option value="medium" ${p.additivePriority === 'medium' ? 'selected' : ''}>主要食品だけ確認</option>
+              <option value="flexible" ${p.additivePriority === 'flexible' ? 'selected' : ''}>続けやすさ優先</option>
+            </select>
+          </div>
         </div>
+        <div class="section-divider">筋トレ環境</div>
+        <div class="form-row-3">
+          <div class="form-group"><label>経験</label><select name="trainingExperience">
+            <option value="beginner" ${p.trainingExperience === 'beginner' ? 'selected' : ''}>初心者</option>
+            <option value="intermediate" ${p.trainingExperience === 'intermediate' ? 'selected' : ''}>中級者</option>
+            <option value="advanced" ${p.trainingExperience === 'advanced' ? 'selected' : ''}>上級者</option>
+          </select></div>
+          <div class="form-group"><label>週の日数</label><input type="number" name="daysPerWeek" min="2" max="5" value="${p.daysPerWeek}"></div>
+          <div class="form-group"><label>1回の分数</label><input type="number" name="sessionMinutes" min="20" max="180" step="5" value="${p.sessionMinutes}"></div>
+        </div>
+        <div class="form-group"><label>設備</label><select name="equipment">
+          <option value="gym" ${p.equipment === 'gym' ? 'selected' : ''}>ジム</option>
+          <option value="home" ${p.equipment === 'home' ? 'selected' : ''}>自宅（ダンベル等）</option>
+          <option value="bodyweight" ${p.equipment === 'bodyweight' ? 'selected' : ''}>自重中心</option>
+        </select></div>
         <button type="submit" class="btn btn-primary btn-block">設定を保存</button>
       </form>
     </div>
 
     <div class="card">
-      <div class="card-title">🎯 増量目標（自動計算）</div>
+      <div class="card-title">🎯 増量目標（概算）</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.9rem">
         <div><strong>TDEE</strong><br>${targets.tdee} kcal/日</div>
         <div><strong>目標カロリー</strong><br>${targets.calories} kcal/日</div>
@@ -836,6 +953,7 @@ function renderSettings() {
         <div><strong>炭水化物（目安）</strong><br>${targets.carbs} g/日</div>
         <div><strong>サープラス</strong><br>+${targets.surplus} kcal/日</div>
       </div>
+      <p class="evidence-note" style="margin-top:0.75rem">TDEEは推定値です。毎日の体重ではなく7日平均の変化を見て、必要に応じてサープラスを100kcal単位で調整してください。</p>
     </div>
 
     <div class="card">
@@ -858,7 +976,12 @@ function renderSettings() {
       activity: fd.get('activity'),
       surplus: Number(fd.get('surplus')),
       proteinRatio: Number(fd.get('proteinRatio')),
-      organicPriority: fd.get('organicPriority'),
+      glutenMode: fd.get('glutenMode'),
+      additivePriority: fd.get('additivePriority'),
+      trainingExperience: fd.get('trainingExperience'),
+      daysPerWeek: Number(fd.get('daysPerWeek')),
+      sessionMinutes: Number(fd.get('sessionMinutes')),
+      equipment: fd.get('equipment'),
     });
     toast('設定を保存しました ✅');
     renderAll();

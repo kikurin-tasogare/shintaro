@@ -287,6 +287,7 @@ textarea { resize: vertical; min-height: 80px; }
   font-weight: 500;
 }
 .tag-organic { background: var(--green-pale); color: var(--green-dark); }
+.tag-gf { background: #EDE9FE; color: #5B21B6; }
 .tag-bulk { background: var(--amber-light); color: #8B5E34; }
 .tag-meal { background: #E0F2FE; color: #0369A1; }
 
@@ -400,12 +401,27 @@ textarea { resize: vertical; min-height: 80px; }
 /* Exercise set row */
 .set-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
+  grid-template-columns: minmax(120px, 1.6fr) repeat(4, minmax(68px, 0.8fr)) auto;
   gap: 0.5rem;
   align-items: end;
   margin-bottom: 0.5rem;
 }
 .set-row label { font-size: 0.7rem; }
+
+.card-lead { font-size: 0.85rem; color: var(--brown-muted); margin-bottom: 0.75rem; }
+.plan-meal { padding: 0.85rem 0; border-bottom: 1px solid var(--gray-200); }
+.plan-meal:last-of-type { border-bottom: 0; }
+.plan-meal-head { display: flex; gap: 0.5rem; align-items: center; }
+.plan-meal details { margin-top: 0.45rem; font-size: 0.8rem; }
+.plan-meal summary { cursor: pointer; color: var(--green); font-weight: 700; }
+.ingredient-list { margin: 0.5rem 0 0.5rem 1.25rem; }
+.recipe-steps { color: var(--brown-muted); }
+.label-check { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 99px; background: #FEF3C7; color: #92400E; font-size: 0.65rem; font-weight: 700; }
+.evidence-note { padding: 0.7rem 0.8rem; border-radius: var(--radius-sm); background: var(--gray-100); color: var(--brown-muted); font-size: 0.75rem; line-height: 1.7; }
+.evidence-note a { color: var(--green); }
+.training-advice { margin-top: 1rem; padding: 0.85rem; border-radius: var(--radius-sm); background: var(--green-pale); font-size: 0.8rem; }
+.training-advice ul { margin: 0.5rem 0 0.5rem 1.2rem; }
+.training-advice small { color: var(--brown-muted); }
 
 /* Tip box */
 .tip-box {
@@ -487,4 +503,11 @@ textarea { resize: vertical; min-height: 80px; }
 @media (min-width: 480px) {
   .header-inner { flex-direction: row; justify-content: space-between; align-items: center; }
   .main { padding: 1.5rem; }
+}
+
+@media (max-width: 560px) {
+  .set-row { grid-template-columns: 1fr 1fr; padding: 0.75rem; background: var(--gray-100); border-radius: var(--radius-sm); }
+  .set-row > div:first-child { grid-column: 1 / -1; }
+  .set-row .remove-exercise { align-self: end; }
+  .form-row-3 { grid-template-columns: 1fr; }
 }
