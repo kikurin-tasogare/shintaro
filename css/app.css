@@ -224,6 +224,27 @@ input:focus, select:focus, textarea:focus {
 }
 textarea { resize: vertical; min-height: 80px; }
 
+/* Food calorie calculator */
+.food-calculator {
+  margin: 0 0 1rem;
+  padding: 1rem;
+  border: 2px solid var(--green-pale);
+  border-radius: var(--radius);
+  background: #F8FCF8;
+}
+.food-calculator-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.75rem; }
+.food-calculator-head strong { color: var(--green-dark); font-family: var(--font-display); }
+.food-calculator-head p, .calculator-note { color: var(--brown-muted); font-size: 0.75rem; margin-top: 0.2rem; }
+.food-calculator-row { display: grid; grid-template-columns: minmax(0, 1fr) 100px auto; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; }
+.food-grams { position: relative; }
+.food-grams input { padding-right: 1.8rem; }
+.food-grams span { position: absolute; right: 0.65rem; top: 50%; transform: translateY(-50%); color: var(--brown-muted); font-size: 0.8rem; pointer-events: none; }
+.nutrition-total { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem; margin: 0.75rem 0; }
+.nutrition-total span { background: var(--white); border-radius: var(--radius-sm); padding: 0.5rem 0.2rem; text-align: center; }
+.nutrition-total strong, .nutrition-total small { display: block; }
+.nutrition-total strong { color: var(--green-dark); font-size: 1rem; }
+.nutrition-total small { color: var(--brown-muted); font-size: 0.6rem; line-height: 1.3; }
+
 /* Buttons */
 .btn {
   display: inline-flex;
@@ -510,4 +531,10 @@ textarea { resize: vertical; min-height: 80px; }
   .set-row > div:first-child { grid-column: 1 / -1; }
   .set-row .remove-exercise { align-self: end; }
   .form-row-3 { grid-template-columns: 1fr; }
+  .nutrition-total { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 390px) {
+  .food-calculator-head { flex-direction: column; }
+  .food-calculator-row { grid-template-columns: minmax(0, 1fr) 88px auto; }
 }

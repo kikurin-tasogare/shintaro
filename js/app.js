@@ -1,10 +1,10 @@
-import { store } from './storage.js?v=3';
+import { store } from './storage.js?v=4';
 import {
   ORGANIC_FOODS, MEAL_TEMPLATES, WORKOUT_TEMPLATES, DAYS, MEAL_TYPES,
   BULK_TIPS, ORGANIC_SHOPS, calcBulkTargets, getFoodById,
   estimateMealNutrition, buildDailyMealPlan, getWorkoutWeek, NUTRITION_SOURCE,
   todayStr, formatDate,
-} from './data.js?v=3';
+} from './data.js?v=4';
 
 let state = {
   page: 'home',
@@ -361,6 +361,26 @@ function renderMealLog() {
             ${MEAL_TEMPLATES.map(t => `<option value="${t.id}">${t.name}（${t.mealType}）</option>`).join('')}
           </select>
         </div>
+        <div class="food-calculator">
+          <div class="food-calculator-head">
+            <div>
+              <strong>🧮 食べた物から自動計算</strong>
+              <p>食材と実際に食べた量を入れてください。</p>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" id="addFoodItem">＋ 食材</button>
+          </div>
+          <div id="foodCalculatorRows">
+            ${renderFoodCalculatorRow()}
+          </div>
+          <div class="nutrition-total" id="foodCalculatorTotal">
+            <span><strong>0</strong><small>kcal</small></span>
+            <span><strong>0</strong><small>たんぱく質 g</small></span>
+            <span><strong>0</strong><small>炭水化物 g</small></span>
+            <span><strong>0</strong><small>脂質 g</small></span>
+          </div>
+          <button type="button" class="btn btn-secondary btn-block" id="applyFoodCalculation">計算結果を記録欄へ反映</button>
+          <p class="calculator-note">一覧にない市販品・外食は、商品の栄養成分表示を下の欄へ直接入力してください。</p>
+        </div>
         <div class="form-row-3">
           <div class="form-group"><label>カロリー</label><input type="number" name="calories" placeholder="kcal" min="0"></div>
           <div class="form-group"><label>タンパク質(g)</label><input type="number" name="protein" placeholder="g" min="0"></div>
@@ -390,7 +410,8 @@ function renderMealLog() {
             <div class="log-item-title">${esc(m.name)} <span class="tag tag-meal">${esc(m.mealType || '')}</span>
               ${m.organic ? '<span class="tag tag-organic">🌿</span>' : ''}
             </div>
-            <div class="log-item-meta">${formatDate(m.date)} · ${m.calories || 0}kcal · P${m.protein || 0}g</div>
+            <div class="log-item-meta">${formatDate(m.date)} · ${m.calories || 0}kcal · P${m.protein || 0}g · C${m.carbs || 0}g · F${m.fat || 0}g</div>
+            ${m.ingredients?.length ? `<div class="log-item-meta">${m.ingredients.map(item => `${esc(item.name)} ${item.grams}g`).join('、')}</div>` : ''}
           </div>
           <div class="log-item-actions">
             <button class="btn btn-danger btn-sm" data-delete-meal="${m.id}">削除</button>
@@ -398,6 +419,44 @@ function renderMealLog() {
         </li>`).join('')}</ul>`
       : `<div class="empty-state"><p>まだ記録がありません</p></div>`}
     </div>`;
+}
+
+function foodOptions(selectedId = '') {
+  const categories = [...new Set(ORGANIC_FOODS.map(food => food.category))];
+  return `<option value="">食材を選ぶ</option>${categories.map(category => `
+    <optgroup label="${esc(category)}">
+      ${ORGANIC_FOODS.filter(food => food.category === category).map(food =>
+        `<option value="${food.id}" ${food.id === selectedId ? 'selected' : ''}>${esc(food.name)}</option>`
+      ).join('')}
+    </optgroup>`).join('')}`;
+}
+
+function renderFoodCalculatorRow(selectedId = '', grams = 100) {
+  return `<div class="food-calculator-row">
+    <select class="food-select" aria-label="食材">${foodOptions(selectedId)}</select>
+    <div class="food-grams"><input class="food-grams-input" type="number" value="${grams}" min="1" max="3000" step="1" inputmode="decimal" aria-label="食べた量"><span>g</span></div>
+    <button type="button" class="btn btn-danger btn-sm remove-food-item" aria-label="この食材を削除">✕</button>
+  </div>`;
+}
+
+function calculateFoodRows(form) {
+  const ingredients = [...form.querySelectorAll('.food-calculator-row')].map(row => {
+    const food = getFoodById(row.querySelector('.food-select').value);
+    const grams = Number(row.querySelector('.food-grams-input').value) || 0;
+    return food && grams > 0 ? { id: food.id, name: food.name, grams } : null;
+  }).filter(Boolean);
+  return { ingredients, nutrition: estimateMealNutrition(ingredients) };
+}
+
+function updateFoodCalculator(form) {
+  const { nutrition } = calculateFoodRows(form);
+  const total = $('#foodCalculatorTotal');
+  if (!total) return;
+  total.innerHTML = `
+    <span><strong>${nutrition.calories}</strong><small>kcal</small></span>
+    <span><strong>${nutrition.protein}</strong><small>たんぱく質 g</small></span>
+    <span><strong>${nutrition.carbs}</strong><small>炭水化物 g</small></span>
+    <span><strong>${nutrition.fat}</strong><small>脂質 g</small></span>`;
 }
 
 function renderWeightLog() {
@@ -517,6 +576,7 @@ function bindLogEvents() {
     mf.addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(mf);
+      const calculated = calculateFoodRows(mf);
       store.addMealLog({
         date: fd.get('date'),
         mealType: fd.get('mealType'),
@@ -527,6 +587,7 @@ function bindLogEvents() {
         fat: Number(fd.get('fat')) || 0,
         organic: fd.get('organic') === 'on',
         note: fd.get('note'),
+        ingredients: calculated.ingredients,
       });
       toast('食事記録を保存しました 🍽️');
       renderAll();
@@ -543,6 +604,43 @@ function bindLogEvents() {
       mf.querySelector('[name="carbs"]').value = nutrition.carbs;
       mf.querySelector('[name="fat"]').value = nutrition.fat;
       mf.querySelector('[name="organic"]').checked = tpl.minimallyProcessed;
+    });
+
+    const calculatorRows = $('#foodCalculatorRows');
+    const bindFoodRow = (row) => {
+      row.querySelectorAll('select, input').forEach(input => input.addEventListener('input', () => updateFoodCalculator(mf)));
+      row.querySelector('.remove-food-item')?.addEventListener('click', () => {
+        row.remove();
+        if (!calculatorRows.children.length) {
+          calculatorRows.insertAdjacentHTML('beforeend', renderFoodCalculatorRow());
+          bindFoodRow(calculatorRows.lastElementChild);
+        }
+        updateFoodCalculator(mf);
+      });
+    };
+    const bindAllFoodRows = () => calculatorRows.querySelectorAll('.food-calculator-row').forEach(bindFoodRow);
+    bindAllFoodRows();
+
+    $('#addFoodItem')?.addEventListener('click', () => {
+      calculatorRows.insertAdjacentHTML('beforeend', renderFoodCalculatorRow());
+      bindFoodRow(calculatorRows.lastElementChild);
+      calculatorRows.lastElementChild.querySelector('.food-select').focus();
+    });
+
+    $('#applyFoodCalculation')?.addEventListener('click', () => {
+      const { ingredients, nutrition } = calculateFoodRows(mf);
+      if (!ingredients.length) {
+        toast('食材を1つ以上選んでください');
+        return;
+      }
+      mf.querySelector('[name="calories"]').value = nutrition.calories;
+      mf.querySelector('[name="protein"]').value = nutrition.protein;
+      mf.querySelector('[name="carbs"]').value = nutrition.carbs;
+      mf.querySelector('[name="fat"]').value = nutrition.fat;
+      if (!mf.querySelector('[name="name"]').value.trim()) {
+        mf.querySelector('[name="name"]').value = ingredients.slice(0, 3).map(item => item.name).join('＋') + (ingredients.length > 3 ? 'ほか' : '');
+      }
+      toast('計算結果を反映しました 🧮');
     });
   }
 
