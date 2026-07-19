@@ -151,9 +151,6 @@ function renderHome() {
           </div>
         </div>`).join('')
       : `<div class="empty-state"><div class="emoji">💪</div><p>今日はまだ記録なし</p></div>`}
-      <button class="btn btn-primary btn-block" style="margin-top:0.75rem" onclick="navigate('log','workout')">
-        筋トレを記録する
-      </button>
     </div>
 
     <div class="card">
@@ -166,9 +163,6 @@ function renderHome() {
         </p>` : `
         <div class="empty-state"><div class="emoji">⚖️</div><p>体重を記録するとグラフが表示されます</p></div>`}
       ${goalWeightProgress(data)}
-      <button class="btn btn-secondary btn-block" style="margin-top:0.75rem" onclick="navigate('log','weight')">
-        体重を記録する
-      </button>
       <p class="evidence-note" style="margin-top:0.75rem">
         7日平均: ${trend.average === null ? '記録待ち' : `${trend.average.toFixed(1)}kg`}
         ${trend.weeklyChange === null ? '' : ` · 前週比 ${trend.weeklyChange >= 0 ? '+' : ''}${trend.weeklyChange.toFixed(2)}kg`}
@@ -179,9 +173,6 @@ function renderHome() {
     <div class="card">
       <div class="card-title">🌿 今日の食事</div>
       ${renderTodayMeals(today)}
-      <button class="btn btn-primary btn-block" style="margin-top:0.75rem" onclick="navigate('log','meal')">
-        食事を記録する
-      </button>
     </div>
 
     <div class="card">
