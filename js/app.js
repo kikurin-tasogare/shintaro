@@ -130,19 +130,19 @@ function renderHome() {
     : null;
 
   main().innerHTML = `
-    <div class="tip-box">💡 ${tip}</div>
+    <div class="tip-box">✦ ${tip}</div>
 
     <div class="card">
-      <div class="card-title">📊 今日の進捗 <span class="tag tag-bulk">増量中</span></div>
-      ${progressBar('🔥 カロリー', nutrition.calories, targets.calories, 'calories')}
-      ${progressBar('💪 タンパク質', nutrition.protein, targets.protein, 'protein')}
+      <div class="card-title">✦ 今日の進捗 <span class="tag tag-bulk">増量中</span></div>
+      ${progressBar('☽ カロリー', nutrition.calories, targets.calories, 'calories')}
+      ${progressBar('✧ タンパク質', nutrition.protein, targets.protein, 'protein')}
       <p style="font-size:0.8rem;color:var(--brown-muted);margin-top:0.5rem">
         目標: ${targets.calories}kcal（TDEE ${targets.tdee} + サープラス ${targets.surplus}）
       </p>
     </div>
 
     <div class="card">
-      <div class="card-title">🏋️ 今日のトレーニング</div>
+      <div class="card-title">☾ 今日のトレーニング</div>
       ${workouts.length ? workouts.map(w => `
         <div class="log-item">
           <div class="log-item-main">
@@ -150,18 +150,18 @@ function renderHome() {
             <div class="log-item-meta">${w.exercises?.length || 0}種目 · ${w.duration || '—'}分</div>
           </div>
         </div>`).join('')
-      : `<div class="empty-state"><div class="emoji">💪</div><p>今日はまだ記録なし</p></div>`}
+      : `<div class="empty-state"><div class="emoji">✧</div><p>今日はまだ記録なし</p></div>`}
     </div>
 
     <div class="card">
-      <div class="card-title">⚖️ 体重の推移</div>
+      <div class="card-title">☽ 体重の推移</div>
       ${weightLogs.length ? `
         <div class="weight-chart">${chartBars}</div>
         <p style="font-size:0.85rem;text-align:center;margin-top:0.5rem">
           現在 ${data.weightLogs[0].weight}kg → 目標 ${data.profile.targetWeight}kg
           ${gained !== null ? `（変化: ${gained > 0 ? '+' : ''}${gained}kg）` : ''}
         </p>` : `
-        <div class="empty-state"><div class="emoji">⚖️</div><p>体重を記録するとグラフが表示されます</p></div>`}
+        <div class="empty-state"><div class="emoji">☾</div><p>体重を記録するとグラフが表示されます</p></div>`}
       ${goalWeightProgress(data)}
       <p class="evidence-note" style="margin-top:0.75rem">
         7日平均: ${trend.average === null ? '記録待ち' : `${trend.average.toFixed(1)}kg`}
@@ -171,12 +171,12 @@ function renderHome() {
     </div>
 
     <div class="card">
-      <div class="card-title">🌿 今日の食事</div>
+      <div class="card-title">✦ 今日の食事</div>
       ${renderTodayMeals(today)}
     </div>
 
     <div class="card">
-      <div class="card-title">🥢 今日のGF増量プラン <span class="tag tag-gf">GF優先</span></div>
+      <div class="card-title">☾ 今日のGF増量プラン <span class="tag tag-gf">GF優先</span></div>
       <p class="card-lead">毎日組み合わせを変え、分量から栄養を計算しています。</p>
       ${dailyPlan.map(item => `
         <div class="plan-meal">
@@ -205,20 +205,20 @@ function goalWeightProgress(data) {
   const span = target - start;
   const pct = span > 0 ? Math.max(0, Math.min(100, Math.round(((current - start) / span) * 100))) : 0;
   return `<div class="progress-group">
-    <div class="progress-label"><span>🎯 目標まで</span><span>${current}kg / ${target}kg（${pct}%）</span></div>
+    <div class="progress-label"><span>✦ 目標まで</span><span>${current}kg / ${target}kg（${pct}%）</span></div>
     <div class="progress-bar"><div class="progress-fill weight" style="width:${pct}%"></div></div>
   </div>`;
 }
 
 function renderTodayMeals(date) {
   const { meals } = store.getLogsForDate(date);
-  if (!meals.length) return `<div class="empty-state"><div class="emoji">🍽️</div><p>今日はまだ食事記録なし</p></div>`;
+  if (!meals.length) return `<div class="empty-state"><div class="emoji">✦</div><p>今日はまだ食事記録なし</p></div>`;
   return `<ul class="log-list">${meals.map(m => `
     <li class="log-item">
       <div class="log-item-main">
         <div class="log-item-title">${esc(m.name)} <span class="tag tag-meal">${esc(m.mealType || '')}</span></div>
         <div class="log-item-meta">${m.calories || 0}kcal · P${m.protein || 0}g · C${m.carbs || 0}g · F${m.fat || 0}g
-          ${m.organic ? '<span class="tag tag-organic">🌿 素材中心</span>' : ''}
+          ${m.organic ? '<span class="tag tag-organic">✧ 素材中心</span>' : ''}
         </div>
       </div>
     </li>`).join('')}</ul>`;
@@ -228,9 +228,9 @@ function renderTodayMeals(date) {
 function renderLog() {
   main().innerHTML = `
     <div class="sub-tabs">
-      <button class="sub-tab ${state.logTab === 'workout' ? 'active' : ''}" data-log-tab="workout">🏋️ 筋トレ</button>
-      <button class="sub-tab ${state.logTab === 'meal' ? 'active' : ''}" data-log-tab="meal">🍽️ 食事</button>
-      <button class="sub-tab ${state.logTab === 'weight' ? 'active' : ''}" data-log-tab="weight">⚖️ 体重</button>
+      <button class="sub-tab ${state.logTab === 'workout' ? 'active' : ''}" data-log-tab="workout">☾ 筋トレ</button>
+      <button class="sub-tab ${state.logTab === 'meal' ? 'active' : ''}" data-log-tab="meal">✦ 食事</button>
+      <button class="sub-tab ${state.logTab === 'weight' ? 'active' : ''}" data-log-tab="weight">☽ 体重</button>
     </div>
     <div id="logContent"></div>`;
 
@@ -249,7 +249,7 @@ function renderWorkoutLog() {
   const recent = data.workoutLogs.slice(0, 20);
   return `
     <div class="card">
-      <div class="card-title">🏋️ 筋トレを記録</div>
+      <div class="card-title">☾ 筋トレを記録</div>
       <form id="workoutForm">
         <div class="form-group">
           <label>日付</label>
@@ -295,7 +295,7 @@ function renderWorkoutLog() {
       ${renderTrainingAdvice(recent[0])}
     </div>
     <div class="card">
-      <div class="card-title">📜 最近の記録</div>
+      <div class="card-title">◇ 最近の記録</div>
       ${recent.length ? `<ul class="log-list">${recent.map(w => `
         <li class="log-item">
           <div class="log-item-main">
@@ -329,7 +329,7 @@ function renderMealLog() {
   const recent = data.mealLogs.slice(0, 20);
   return `
     <div class="card">
-      <div class="card-title">🍽️ 食事を記録</div>
+      <div class="card-title">✦ 食事を記録</div>
       <form id="mealForm">
         <div class="form-row">
           <div class="form-group">
@@ -355,7 +355,7 @@ function renderMealLog() {
         <div class="food-calculator">
           <div class="food-calculator-head">
             <div>
-              <strong>🧮 食べた物から自動計算</strong>
+              <strong>☽ 食べた物から自動計算</strong>
               <p>食材と実際に食べた量を入れてください。</p>
             </div>
             <button type="button" class="btn btn-outline btn-sm" id="addFoodItem">＋ 食材</button>
@@ -383,7 +383,7 @@ function renderMealLog() {
         </div>
         <div class="form-group">
           <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
-            <input type="checkbox" name="organic" style="width:auto"> 🌿 素材中心・原材料確認済み
+            <input type="checkbox" name="organic" style="width:auto"> ✧ 素材中心・原材料確認済み
           </label>
         </div>
         <div class="form-group">
@@ -394,12 +394,12 @@ function renderMealLog() {
       </form>
     </div>
     <div class="card">
-      <div class="card-title">📜 最近の記録</div>
+      <div class="card-title">◇ 最近の記録</div>
       ${recent.length ? `<ul class="log-list">${recent.map(m => `
         <li class="log-item">
           <div class="log-item-main">
             <div class="log-item-title">${esc(m.name)} <span class="tag tag-meal">${esc(m.mealType || '')}</span>
-              ${m.organic ? '<span class="tag tag-organic">🌿</span>' : ''}
+              ${m.organic ? '<span class="tag tag-organic">✧</span>' : ''}
             </div>
             <div class="log-item-meta">${formatDate(m.date)} · ${m.calories || 0}kcal · P${m.protein || 0}g · C${m.carbs || 0}g · F${m.fat || 0}g</div>
             ${m.ingredients?.length ? `<div class="log-item-meta">${m.ingredients.map(item => `${esc(item.name)} ${item.grams}g`).join('、')}</div>` : ''}
@@ -456,7 +456,7 @@ function renderWeightLog() {
   const targets = calcBulkTargets(profileWithLatestWeight(data));
   return `
     <div class="card">
-      <div class="card-title">⚖️ 体重を記録</div>
+      <div class="card-title">☽ 体重を記録</div>
       <div class="tip-box">測定は毎日でも大丈夫。朝・排泄後など条件をそろえ、日々の上下ではなく7日平均で判断します。</div>
       <form id="weightForm">
         <div class="form-row">
@@ -480,7 +480,7 @@ function renderWeightLog() {
       </p>
     </div>
     <div class="card">
-      <div class="card-title">📜 体重履歴</div>
+      <div class="card-title">◇ 体重履歴</div>
       ${logs.length ? `<ul class="log-list">${logs.map(w => `
         <li class="log-item">
           <div class="log-item-main">
@@ -520,7 +520,7 @@ function bindLogEvents() {
         exercises,
         note: fd.get('note'),
       });
-      toast('筋トレ記録を保存しました 💪');
+      toast('筋トレ記録を保存しました ✦');
       renderAll();
     });
 
@@ -580,7 +580,7 @@ function bindLogEvents() {
         note: fd.get('note'),
         ingredients: calculated.ingredients,
       });
-      toast('食事記録を保存しました 🍽️');
+      toast('食事記録を保存しました ✦');
       renderAll();
     });
 
@@ -631,7 +631,7 @@ function bindLogEvents() {
       if (!mf.querySelector('[name="name"]').value.trim()) {
         mf.querySelector('[name="name"]').value = ingredients.slice(0, 3).map(item => item.name).join('＋') + (ingredients.length > 3 ? 'ほか' : '');
       }
-      toast('計算結果を反映しました 🧮');
+      toast('計算結果を反映しました ☽');
     });
   }
 
@@ -644,7 +644,7 @@ function bindLogEvents() {
       weight: Number(fd.get('weight')),
       note: fd.get('note'),
     });
-    toast('体重を記録しました ⚖️');
+    toast('体重を記録しました ☾');
     renderAll();
   });
 
@@ -682,9 +682,9 @@ function bindLogEvents() {
 function renderMenu() {
   main().innerHTML = `
     <div class="sub-tabs">
-      <button class="sub-tab ${state.menuTab === 'workout' ? 'active' : ''}" data-menu-tab="workout">🏋️ 筋トレメニュー</button>
-      <button class="sub-tab ${state.menuTab === 'meal' ? 'active' : ''}" data-menu-tab="meal">🍽️ 食事メニュー</button>
-      <button class="sub-tab ${state.menuTab === 'shopping' ? 'active' : ''}" data-menu-tab="shopping">🛒 買い物リスト</button>
+      <button class="sub-tab ${state.menuTab === 'workout' ? 'active' : ''}" data-menu-tab="workout">☾ 筋トレメニュー</button>
+      <button class="sub-tab ${state.menuTab === 'meal' ? 'active' : ''}" data-menu-tab="meal">✦ 食事メニュー</button>
+      <button class="sub-tab ${state.menuTab === 'shopping' ? 'active' : ''}" data-menu-tab="shopping">◇ 買い物リスト</button>
     </div>
     <div id="menuContent"></div>`;
 
@@ -703,7 +703,7 @@ function renderWorkoutMenu() {
   const menu = data.workoutMenu;
   return `
     <div class="card">
-      <div class="card-title">🏋️ 週間筋トレメニュー</div>
+      <div class="card-title">☾ 週間筋トレメニュー</div>
       <p style="font-size:0.85rem;color:var(--brown-muted);margin-bottom:1rem">
         続けられる日数を優先。基本種目は4〜8週間続け、重量か回数を少しずつ伸ばします。
       </p>
@@ -731,7 +731,7 @@ function renderWorkoutMenu() {
           </div>`;
       }).join('')}
       <button class="btn btn-secondary btn-block" id="applyBulkSplit" style="margin-top:0.75rem">
-        📋 設定した日数で自動作成
+        ◇ 設定した日数で自動作成
       </button>
       <div class="evidence-note" style="margin-top:0.75rem">参考: <a href="https://acsm.org/resistance-training-guidelines-update-2026/" target="_blank" rel="noopener">ACSM 2026 筋力トレーニング指針</a>。筋肥大は各筋群週約10セットを出発点に、継続と回復を優先します。</div>
     </div>`;
@@ -744,7 +744,7 @@ function renderMealMenuBuilder() {
 
   return `
     <div class="card">
-        <div class="card-title">🍽️ 週間食事メニュー <span class="tag tag-gf">GF優先</span></div>
+        <div class="card-title">✦ 週間食事メニュー <span class="tag tag-gf">GF優先</span></div>
       <p style="font-size:0.85rem;color:var(--brown-muted);margin-bottom:1rem">
         1日目標: ${targets.calories}kcal / タンパク質${targets.protein}g
       </p>
@@ -801,12 +801,12 @@ function renderMealMenuBuilder() {
           </div>`;
       }).join('')}
       <button class="btn btn-secondary btn-block" id="applyBulkMeals" style="margin-top:0.75rem">
-        📋 増量向け食事プランを自動設定
+        ◇ 増量向け食事プランを自動設定
       </button>
     </div>
 
     <div class="card">
-      <div class="card-title">📖 GF優先テンプレート一覧</div>
+      <div class="card-title">◇ GF優先テンプレート一覧</div>
       ${MEAL_TEMPLATES.map(t => `
         <div class="menu-meal">
           <div class="menu-meal-name">${esc(t.name)} <span class="tag tag-meal">${t.mealType}</span> <span class="tag tag-gf">GF</span></div>
@@ -839,7 +839,7 @@ function renderShoppingList() {
 
   return `
     <div class="card">
-      <div class="card-title">🛒 週間買い物リスト</div>
+      <div class="card-title">◇ 週間買い物リスト</div>
       <p style="font-size:0.85rem;color:var(--brown-muted);margin-bottom:1rem">
         食事メニューから自動生成。包装食品はGF表示と原材料を確認してください。
       </p>
@@ -855,11 +855,11 @@ function renderShoppingList() {
             </li>`;
           }).join('')}
         </ul>`).join('')
-      : `<div class="empty-state"><div class="emoji">🛒</div><p>食事メニューを設定すると買い物リストが自動生成されます</p></div>`}
+      : `<div class="empty-state"><div class="emoji">◇</div><p>食事メニューを設定すると買い物リストが自動生成されます</p></div>`}
     </div>
 
     <div class="card">
-      <div class="card-title">🏪 素材中心の購入ヒント</div>
+      <div class="card-title">✦ 素材中心の購入ヒント</div>
       ${ORGANIC_SHOPS.map(s => `
         <div class="menu-meal">
           <div class="menu-meal-name">${s.name}</div>
@@ -905,7 +905,7 @@ function bindMenuEvents() {
     const suggested = getWorkoutWeek(data.profile.daysPerWeek);
     data.workoutMenu.days = { 月: null, 火: null, 水: null, 木: null, 金: null, 土: null, 日: null, ...suggested };
     store.saveWorkoutMenu(data.workoutMenu);
-    toast(`週${data.profile.daysPerWeek}日のメニューを設定しました 💪`);
+    toast(`週${data.profile.daysPerWeek}日のメニューを設定しました ✦`);
     renderAll();
   });
 
@@ -919,7 +919,7 @@ function bindMenuEvents() {
     });
     data.mealMenu.days = plan;
     store.saveMealMenu(data.mealMenu);
-    toast('GF優先の増量食事プランを設定しました 🌾');
+    toast('GF優先の増量食事プランを設定しました ☾');
     renderAll();
   });
 
@@ -940,7 +940,7 @@ function renderSettings() {
 
   main().innerHTML = `
     <div class="card">
-      <div class="card-title">👤 プロフィール</div>
+      <div class="card-title">☽ プロフィール</div>
       <form id="profileForm">
         <div class="form-group">
           <label>名前</label>
@@ -1033,7 +1033,7 @@ function renderSettings() {
     </div>
 
     <div class="card">
-      <div class="card-title">🎯 増量目標（概算）</div>
+      <div class="card-title">✦ 増量目標（概算）</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.9rem">
         <div><strong>TDEE</strong><br>${targets.tdee} kcal/日</div>
         <div><strong>目標カロリー</strong><br>${targets.calories} kcal/日</div>
@@ -1046,7 +1046,7 @@ function renderSettings() {
     </div>
 
     <div class="card">
-      <div class="card-title">💾 データ管理</div>
+      <div class="card-title">◇ データ管理</div>
       <button class="btn btn-secondary btn-block" id="exportBtn" style="margin-bottom:0.5rem">データをエクスポート</button>
       <button class="btn btn-outline btn-block" id="importBtn" style="margin-bottom:0.5rem">データをインポート</button>
       <button class="btn btn-danger btn-block" id="resetBtn">すべてのデータをリセット</button>
@@ -1072,7 +1072,7 @@ function renderSettings() {
       sessionMinutes: Number(fd.get('sessionMinutes')),
       equipment: fd.get('equipment'),
     });
-    toast('設定を保存しました ✅');
+    toast('設定を保存しました ✦');
     renderAll();
   });
 
